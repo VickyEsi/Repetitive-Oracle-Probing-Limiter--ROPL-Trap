@@ -1,0 +1,25 @@
+ethereum_rpc = "https://ethereum-hoodi-rpc.publicnode.com"
+drosera_rpc = "https://relay.hoodi.drosera.io"
+eth_chain_id = 560048
+drosera_address = "0x91cB447BaFc6e0EA0F4Fe056F5a9b1F14bb06e5D"
+
+[traps]
+
+[traps.RateLimiterTrap]
+# The path to the compiled trap contract JSON artifact.
+# This path is relative to the project root.
+path = "out/RateLimiterTrap.sol/RateLimiterTrap.json"
+response_contract = ""
+# The address of the response handler contract (ResponseContract.sol).
+# This address is obtained after deploying the ResponseContract.
+response_function = "executeResponse(bytes)"
+# The function signature of the collect function in the trap contract.
+collect_function = "collect()"
+# The function signature of the should_respond function in the trap contract.
+should_respond_function = "shouldRespond(bytes[])"
+cooldown_period_blocks = 33
+min_number_of_operators = 1
+max_number_of_operators = 2
+block_sample_size = 10
+private_trap = true
+whitelist = []

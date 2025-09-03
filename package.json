@@ -1,0 +1,22 @@
+{
+  "name": "oracle-probing-trap",
+  "version": "0.1.0",
+  "description": "A Drosera trap to detect and rate-limit repetitive failed transactions.",
+  "main": "index.js",
+  "scripts": {},
+  "keywords": [
+    "foundry",
+    "solidity",
+    "drosera",
+    "trap"
+  ],
+  "author": "",
+  "license": "MIT",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
