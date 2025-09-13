@@ -7,14 +7,25 @@ interface IMockTargetContract {
 }
 
 contract MockResponseContract {
-    address public targetContract;
+    address public TARGET_CONTRACT;
+    address public GUARDIAN;
 
-    function setTargetContract(address _targetContract) public {
-        targetContract = _targetContract;
+    modifier onlyGuardian() {
+        require(msg.sender == GUARDIAN, "Only guardian can call this function");
+        _;
     }
 
-    function executeResponse(bytes calldata responseData) external {
+    constructor(address target, address guardian) {
+        TARGET_CONTRACT = target;
+        GUARDIAN = guardian;
+    }
+
+    function setTargetContract(address target) public {
+        TARGET_CONTRACT = target;
+    }
+
+    function executeResponse(bytes calldata responseData) external onlyGuardian {
         (address offender) = abi.decode(responseData, (address));
-        IMockTargetContract(targetContract).rateLimitAddress(offender);
+        IMockTargetContract(TARGET_CONTRACT).rateLimitAddress(offender);
     }
 }

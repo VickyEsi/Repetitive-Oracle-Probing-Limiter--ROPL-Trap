@@ -9,15 +9,14 @@ pragma solidity ^0.8.20;
  * The rate limit is applied by a separate ResponseContract.
  */
 contract TargetContract {
-    // The address of the ResponseContract, which is authorized to apply rate limits.
-    // This is a placeholder and must be replaced with the actual deployed ResponseContract address.
-    address public constant RESPONSE_CONTRACT = 0x0000000000000000000000000000000000000001;
+    address public immutable RESPONSE_CONTRACT;
 
-    // The duration of the rate limit in seconds.
     uint256 public constant RATE_LIMIT_DURATION = 1 hours;
+    uint256 public constant RECENT_CALLERS_BUFFER_SIZE = 100;
 
-    // Mapping to store the timestamp until which a user is rate-limited.
     mapping(address => uint256) public rateLimitedUntil;
+    address[RECENT_CALLERS_BUFFER_SIZE] public recentCallers;
+    uint256 public callerIndex;
 
     // --- Errors ---
     error RateLimited(uint256 expiryTimestamp);
@@ -31,16 +30,20 @@ contract TargetContract {
         _;
     }
 
+    constructor(address responseContract) {
+        RESPONSE_CONTRACT = responseContract;
+    }
+
     /**
      * @notice A function that is protected by the rate-limiting mechanism.
      * Probing this function repeatedly can get an address rate-limited.
      */
-    function guardedOperation() public view {
+    function guardedOperation() public {
         if (block.timestamp < rateLimitedUntil[msg.sender]) {
             revert RateLimited(rateLimitedUntil[msg.sender]);
         }
-        // In a real-world scenario, this function would perform some state-changing operation.
-        // For this PoC, it does nothing if the user is not rate-limited.
+        recentCallers[callerIndex] = msg.sender;
+        callerIndex = (callerIndex + 1) % RECENT_CALLERS_BUFFER_SIZE;
     }
 
     /**
@@ -50,5 +53,16 @@ contract TargetContract {
      */
     function rateLimitAddress(address user) external onlyResponseContract {
         rateLimitedUntil[user] = block.timestamp + RATE_LIMIT_DURATION;
+    }
+
+    /**
+     * @notice Returns the list of recent callers.
+     */
+    function getRecentCallers() external view returns (address[] memory) {
+        address[] memory callers = new address[](RECENT_CALLERS_BUFFER_SIZE);
+        for (uint i = 0; i < RECENT_CALLERS_BUFFER_SIZE; i++) {
+            callers[i] = recentCallers[i];
+        }
+        return callers;
     }
 }

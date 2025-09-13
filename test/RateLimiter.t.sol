@@ -13,18 +13,16 @@ contract RateLimiterTest is Test {
 
     address public offender = makeAddr("offender");
     address public regularUser = makeAddr("regularUser");
+    address public guardian = makeAddr("guardian");
 
     function setUp() public {
         // Deploy the mock contracts
-        target = new MockTargetContract();
-        response = new MockResponseContract();
-
-        // Link them using their setter functions
+        target = new MockTargetContract(address(0));
+        response = new MockResponseContract(address(target), guardian);
         target.setResponseContract(address(response));
-        response.setTargetContract(address(target));
 
-        // Instantiate the stateless trap
-        trap = new RateLimiterTrap();
+        // Instantiate the trap with the target's address
+        trap = new RateLimiterTrap(address(target));
     }
 
     function test_NormalOperation() public {
@@ -32,47 +30,59 @@ contract RateLimiterTest is Test {
         target.guardedOperation(); // Should not revert
     }
 
-    function test_ShouldRespond_TriggersOnThreshold() public view {
-        uint256 numCalls = trap.PROBE_THRESHOLD() + 1;
-        bytes[] memory collectedData = new bytes[](numCalls);
-
-        for (uint i = 0; i < numCalls; i++) {
-            collectedData[i] = abi.encode(offender);
+    function test_ShouldRespond_TriggersOnThreshold() public {
+        // Simulate offender calling the guarded function enough times to fill the buffer
+        for (uint i = 0; i < trap.PROBE_THRESHOLD(); i++) {
+            vm.prank(offender);
+            target.guardedOperation();
         }
 
-        (bool should, bytes memory responseData) = trap.shouldRespond(collectedData);
+        // The data that the Drosera node would collect
+        bytes memory collectedData = trap.collect();
+
+        // The array of collected data from multiple blocks
+        bytes[] memory dataHistory = new bytes[](1);
+        dataHistory[0] = collectedData;
+
+        (bool should, bytes memory responseData) = trap.shouldRespond(dataHistory);
 
         assertTrue(should, "Trap should have triggered.");
         (address flaggedOffender) = abi.decode(responseData, (address));
         assertEq(flaggedOffender, offender, "Response data should contain the offender's address.");
     }
 
-    function test_ShouldRespond_DoesNotTriggerBelowThreshold() public view {
-        uint256 numCalls = trap.PROBE_THRESHOLD();
-        bytes[] memory collectedData = new bytes[](numCalls);
-
-        for (uint i = 0; i < numCalls; i++) {
-            collectedData[i] = abi.encode(offender);
+    function test_ShouldRespond_DoesNotTriggerBelowThreshold() public {
+        // Simulate offender calling the guarded function
+        for (uint i = 0; i < trap.PROBE_THRESHOLD() - 1; i++) {
+            vm.prank(offender);
+            target.guardedOperation();
         }
 
-        (bool should, ) = trap.shouldRespond(collectedData);
+        bytes memory collectedData = trap.collect();
+        bytes[] memory dataHistory = new bytes[](1);
+        dataHistory[0] = collectedData;
+
+        (bool should, ) = trap.shouldRespond(dataHistory);
 
         assertFalse(should, "Trap should not have triggered.");
     }
 
     function test_E2E_RateLimitingFlow() public {
         // 1. Simulate probing from the offender
-        uint256 numCalls = trap.PROBE_THRESHOLD() + 1;
-        bytes[] memory collectedData = new bytes[](numCalls);
-        for (uint i = 0; i < numCalls; i++) {
-            collectedData[i] = abi.encode(offender);
+        for (uint i = 0; i < trap.PROBE_THRESHOLD(); i++) {
+            vm.prank(offender);
+            target.guardedOperation();
         }
 
-        // 2. The Drosera trap logic should trigger a response
-        (bool should, bytes memory responseData) = trap.shouldRespond(collectedData);
+        // 2. The Drosera node collects data and the trap logic should trigger a response
+        bytes memory collectedData = trap.collect();
+        bytes[] memory dataHistory = new bytes[](1);
+        dataHistory[0] = collectedData;
+        (bool should, bytes memory responseData) = trap.shouldRespond(dataHistory);
         assertTrue(should, "Trap should trigger");
 
-        // 3. The Drosera network calls the response contract
+        // 3. The Drosera network guardian calls the response contract
+        vm.prank(guardian);
         response.executeResponse(responseData);
 
         // 4. Verify the offender is now rate-limited

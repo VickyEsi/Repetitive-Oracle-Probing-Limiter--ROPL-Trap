@@ -1,17 +1,48 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {Test} from "forge-std/Test.sol";
-import "./TargetContract.sol";
+import {Test, console} from "forge-std/Test.sol";
+import {TargetContract} from "./TargetContract.sol";
 
-contract TargetContractTest is TargetContract, Test {
-    function setResponseContract(address responseContract) external {
-        // This is a test-only function to set the response contract address.
-        // It uses vm.store to bypass the constant nature of the real contract.
-        vm.store(
-            address(this),
-            bytes32(uint256(0)), // Storage slot 0 for RESPONSE_CONTRACT
-            bytes32(uint256(uint160(responseContract)))
-        );
+contract TargetContractTest is Test {
+    address public responseContract = makeAddr("responseContract");
+    address public user = makeAddr("user");
+    TargetContract public target;
+
+    function setUp() public {
+        target = new TargetContract(responseContract);
+    }
+
+    function test_GuardedOperation() public {
+        vm.prank(user);
+        target.guardedOperation();
+
+        address[] memory recentCallers = target.getRecentCallers();
+        assertEq(recentCallers[0], user);
+    }
+
+    function test_RateLimitAddress() public {
+        vm.prank(responseContract);
+        target.rateLimitAddress(user);
+
+        uint256 rateLimitedUntil = target.rateLimitedUntil(user);
+        assertTrue(rateLimitedUntil > block.timestamp);
+    }
+
+    function test_RateLimitAddress_RevertsIfNotResponseContract() public {
+        vm.prank(user);
+        vm.expectRevert(abi.encodeWithSelector(TargetContract.Unauthorized.selector));
+        target.rateLimitAddress(user);
+    }
+
+    function test_GuardedOperation_RevertsIfRateLimited() public {
+        vm.prank(responseContract);
+        target.rateLimitAddress(user);
+
+        uint256 expectedExpiry = target.rateLimitedUntil(user);
+
+        vm.prank(user);
+        vm.expectRevert(abi.encodeWithSelector(TargetContract.RateLimited.selector, expectedExpiry));
+        target.guardedOperation();
     }
 }
